@@ -1,5 +1,8 @@
 from functools import partial
 import numpy as np
+import logging
+
+logging.basicConfig(level=logging.WARNING)
 
 def _obj_wrapper(func, args, kwargs, x):
     return func(x, *args, **kwargs)
@@ -15,14 +18,14 @@ def _cons_ieqcons_wrapper(ieqcons, args, kwargs, x):
 
 def _cons_f_ieqcons_wrapper(f_ieqcons, args, kwargs, x):
     return np.array(f_ieqcons(x, *args, **kwargs))
-    
-def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={}, 
-        swarmsize=100, omega=0.5, phip=0.5, phig=0.5, maxiter=100, 
+
+def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
+        swarmsize=100, omega=0.5, phip=0.5, phig=0.5, maxiter=100,
         minstep=1e-8, minfunc=1e-8, debug=False, processes=1,
         particle_output=False):
     """
     Perform a particle swarm optimization (PSO)
-   
+
     Parameters
     ==========
     func : function
@@ -31,21 +34,21 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
         The lower bounds of the design variable(s)
     ub : array
         The upper bounds of the design variable(s)
-   
+
     Optional
     ========
     ieqcons : list
-        A list of functions of length n such that ieqcons[j](x,*args) >= 0.0 in 
+        A list of functions of length n such that ieqcons[j](x,*args) >= 0.0 in
         a successfully optimized problem (Default: [])
     f_ieqcons : function
-        Returns a 1-D array in which each element must be greater or equal 
-        to 0.0 in a successfully optimized problem. If f_ieqcons is specified, 
+        Returns a 1-D array in which each element must be greater or equal
+        to 0.0 in a successfully optimized problem. If f_ieqcons is specified,
         ieqcons is ignored (Default: None)
     args : tuple
         Additional arguments passed to objective and constraint functions
         (Default: empty tuple)
     kwargs : dict
-        Additional keyword arguments passed to objective and constraint 
+        Additional keyword arguments passed to objective and constraint
         functions (Default: empty dict)
     swarmsize : int
         The number of particles in the swarm (Default: 100)
@@ -69,12 +72,12 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
         If True, progress statements will be displayed every iteration
         (Default: False)
     processes : int
-        The number of processes to use to evaluate objective function and 
+        The number of processes to use to evaluate objective function and
         constraints (default: 1)
     particle_output : boolean
         Whether to include the best per-particle position and the objective
         values at those.
-   
+
     Returns
     =======
     g : array
@@ -85,34 +88,34 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
         The best known position per particle
     pf: arrray
         The objective values at each position in p
-   
+
     """
-   
+
     assert len(lb)==len(ub), 'Lower- and upper-bounds must be the same length'
     assert hasattr(func, '__call__'), 'Invalid function handle'
     lb = np.array(lb)
     ub = np.array(ub)
     assert np.all(ub>lb), 'All upper-bound values must be greater than lower-bound values'
-   
+
     vhigh = np.abs(ub - lb)
     vlow = -vhigh
 
     # Initialize objective function
     obj = partial(_obj_wrapper, func, args, kwargs)
-    
+
     # Check for constraint function(s) #########################################
     if f_ieqcons is None:
         if not len(ieqcons):
             if debug:
-                print('No constraints given.')
+                logging.debug('No constraints given.')
             cons = _cons_none_wrapper
         else:
             if debug:
-                print('Converting ieqcons to a single constraint function')
+                logging.debug('Converting ieqcons to a single constraint function')
             cons = partial(_cons_ieqcons_wrapper, ieqcons, args, kwargs)
     else:
         if debug:
-            print('Single constraint function given in f_ieqcons')
+            logging.debug('Single constraint function given in f_ieqcons')
         cons = partial(_cons_f_ieqcons_wrapper, f_ieqcons, args, kwargs)
     is_feasible = partial(_is_feasible_wrapper, cons)
 
@@ -120,7 +123,7 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
     if processes > 1:
         import multiprocessing
         mp_pool = multiprocessing.Pool(processes)
-        
+
     # Initialize the particle swarm ############################################
     S = swarmsize
     D = len(lb)  # the number of dimensions each particle has
@@ -132,7 +135,7 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
     fp = np.ones(S)*np.inf  # best particle function values
     g = []  # best swarm position
     fg = np.inf  # best swarm position starting value
-    
+
     # Initialize the particle's position
     x = lb + x*(ub - lb)
 
@@ -144,7 +147,7 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
         for i in range(S):
             fx[i] = obj(x[i, :])
             fs[i] = is_feasible(x[i, :])
-       
+
     # Store particle's best position (if constraints are satisfied)
     i_update = np.logical_and((fx < fp), fs)
     p[i_update, :] = x[i_update, :].copy()
@@ -159,10 +162,10 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
         # At the start, there may not be any feasible starting point, so just
         # give it a temporary "best" point since it's likely to change
         g = x[0, :].copy()
-       
+
     # Initialize the particle's velocity
     v = vlow + np.random.rand(S, D)*(vhigh - vlow)
-       
+
     # Iterate until termination criterion met ##################################
     it = 1
     while it <= maxiter:
@@ -196,21 +199,21 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
         i_min = np.argmin(fp)
         if fp[i_min] < fg:
             if debug:
-                print('New best for swarm at iteration {:}: {:} {:}'\
+                logging.debug('New best for swarm at iteration {:}: {:} {:}'\
                     .format(it, p[i_min, :], fp[i_min]))
 
             p_min = p[i_min, :].copy()
             stepsize = np.sqrt(np.sum((g - p_min)**2))
 
             if np.abs(fg - fp[i_min]) <= minfunc:
-                print('Stopping search: Swarm best objective change less than {:}'\
+                logging.debug('Stopping search: Swarm best objective change less than {:}'\
                     .format(minfunc))
                 if particle_output:
                     return p_min, fp[i_min], p, fp
                 else:
                     return p_min, fp[i_min]
             elif stepsize <= minstep:
-                print('Stopping search: Swarm best position change less than {:}'\
+                logging.debug('Stopping search: Swarm best position change less than {:}'\
                     .format(minstep))
                 if particle_output:
                     return p_min, fp[i_min], p, fp
@@ -221,13 +224,13 @@ def pso(func, lb, ub, ieqcons=[], f_ieqcons=None, args=(), kwargs={},
                 fg = fp[i_min]
 
         if debug:
-            print('Best after iteration {:}: {:} {:}'.format(it, g, fg))
+            logging.debug('Best after iteration {:}: {:} {:}'.format(it, g, fg))
         it += 1
 
-    print('Stopping search: maximum iterations reached --> {:}'.format(maxiter))
-    
+    logging.debug('Stopping search: maximum iterations reached --> {:}'.format(maxiter))
+
     if not is_feasible(g):
-        print("However, the optimization couldn't find a feasible design. Sorry")
+        logging.debug("However, the optimization couldn't find a feasible design. Sorry")
     if particle_output:
         return g, fg, p, fp
     else:
